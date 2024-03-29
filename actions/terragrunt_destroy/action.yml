@@ -1,0 +1,66 @@
+name: "Terragrunt Apply"
+description: Wrapper for running TG
+inputs:
+  terragrunt_path:
+    description: "Path to terragrunt file"
+    required: true
+  github_token:
+    description: "github actions org token"
+    required: true
+  tf_actions_version:
+    description: "Terraform Version"
+    required: true
+  tg_actions_version:
+    description: "Terragrunt Version"
+    required: true
+  tf_module_version:
+    description: "Module Release Tag"
+    required: true
+  tf_shared_module_repo:
+    description: "Repo for shared modules"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Store inputs
+      shell: bash
+      id: inputs
+      run: |
+        echo ::set-output name=terragrunt_path::$(echo ${{ inputs.terragrunt_path}})
+
+    - name: Check out code #Copies Shared module repo to ./shared_modules folder
+      uses: actions/checkout@v3
+      with:
+        repository: ccsq-qdas/terraform-modules
+        token: ${{ inputs.github_token }}
+        path: shared_modules
+        ref: ${{inputs.tf_module_version}}
+
+    - name: Terragrunt Init
+      uses: ccsq-qdas/shared-workflows/actions/terragrunt-github-actions@v1.0.83
+      with:
+        tf_actions_working_dir: ${{ steps.inputs.outputs.terragrunt_path }}
+        tf_actions_subcommand: "init"
+        tf_actions_version: ${{ inputs.tf_actions_version}}
+        tg_actions_version: ${{ inputs.tg_actions_version}}
+      env:
+        GH_TOKEN: ${{inputs.github_token}}
+
+    - name: "Terragrunt Plan"
+      uses: ccsq-qdas/shared-workflows/actions/terragrunt-github-actions@v1.0.83
+      with:
+        tf_actions_subcommand: "plan -lock=false"
+        tf_actions_working_dir: ${{ steps.inputs.outputs.terragrunt_path }}
+        tf_actions_comment: true
+      env:
+        GH_TOKEN: ${{inputs.github_token}}
+
+    - name: "Terragrunt Destroy"
+      uses: ccsq-qdas/shared-workflows/actions/terragrunt-github-actions@v1.0.83
+      with:
+        tf_actions_subcommand: "destroy -lock=false"
+        tf_actions_working_dir: ${{ steps.inputs.outputs.terragrunt_path }}
+        tf_actions_comment: true
+      env:
+        GH_TOKEN: ${{inputs.github_token}}

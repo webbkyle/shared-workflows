@@ -1,0 +1,102 @@
+name: 'Test Composite Action'
+description: 'Test Composite Action'
+inputs:
+  environment:
+    description: 'Running Environment'
+    required: true
+  system:
+    description: 'System'
+    required: true
+  sub_system:
+    description: 'Sub_System'
+    required: true
+  stack:
+    description: 'Stack'
+    required: true
+  docker_file_path:
+    description: 'Path of the Docker File'
+    required: true
+  git_token:
+    description: 'Git Token'
+    required: true
+  snyk_token:
+    description: 'Snyk Token'
+    required: false
+  push_to_ecr:
+    description: 'Controls if the Docker Build gets pushed to ECR'
+    required: false
+  push_to_ghcr:
+    description: 'Controls if the Docker Build gets pushed to ghcr'
+    required: false
+  snyk_code_scan:
+    description: 'Snyk Token'
+    required: false
+
+outputs:
+  tag:
+    description: "tag name of the docker file"
+    value: ${{ steps.vars.outputs.tag }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Store inputs
+      id: inputs
+      run: |
+        echo ::set-output name=system::$(echo ${{ inputs.system }})
+        echo ::set-output name=sub_system::$(echo ${{ inputs.sub_system }})
+        echo ::set-output name=stack::$(echo ${{ inputs.stack }})
+        echo ::set-output name=docker_file_path::$(echo ${{ inputs.docker_file_path }})
+      shell: bash
+
+    - name: Get Push SHA
+      shell: bash
+      id: tags
+      run: echo ::set-output name=tag::$(git rev-parse --short "$GITHUB_SHA")
+
+    - name: Checkout code
+      uses: actions/checkout@v3
+    - name: Build an image from Dockerfile
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ steps.inputs.outputs.system }}_${{ steps.inputs.outputs.sub_system }}_${{ steps.inputs.outputs.stack }}
+        IMAGE_TAG: ${{ steps.tags.outputs.tag }}
+      run: |
+            echo "${{  inputs.git_token  }}" | docker login ghcr.io -u $ --password-stdin
+            docker build -t ghcr.io/ccsq-qdas/$IMAGE_NAME:${{ steps.tags.outputs.tag }} .
+      working-directory: ${{ steps.inputs.outputs.docker_file_path }}
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ' ghcr.io/ccsq-qdas/${{ steps.inputs.outputs.system }}_${{ steps.inputs.outputs.sub_system }}_${{ steps.inputs.outputs.stack }}:${{ steps.tags.outputs.tag }}'
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL'
+
+    - name: snyk
+      if: inputs.snyk_token != null &&
+          (inputs.snyk_code_scan == true)
+      uses: snyk/actions/docker@master
+      env:
+        SNYK_TOKEN: ${{ inputs.snyk_token }}
+      with:
+        image: ' ghcr.io/ccsq-qdas/${{ steps.inputs.outputs.system }}_${{ steps.inputs.outputs.sub_system }}_${{ steps.inputs.outputs.stack }}:${{ steps.tags.outputs.tag }}'
+        args: --report --severity-threshold=high
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: snyk_results
+        path: snyk.sarif
+
+    - name: Push to ghcr
+      if: ${{  inputs.push_to_ghcr  }} == 'true'
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ steps.inputs.outputs.system }}_${{ steps.inputs.outputs.sub_system }}_${{ steps.inputs.outputs.stack }}
+        IMAGE_TAG: ${{ steps.tags.outputs.tag }}
+      run: |
+            docker push ghcr.io/ccsq-qdas/$IMAGE_NAME:$IMAGE_TAG
+      working-directory: ${{ steps.inputs.outputs.docker_file_path }}

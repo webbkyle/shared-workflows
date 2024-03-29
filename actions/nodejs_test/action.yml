@@ -1,0 +1,42 @@
+name: 'Nodejs Test'
+description: "A Github action to run Node JS Tests"
+
+inputs:
+  node_version:
+    description: 'The version of Node.js to use'
+    required: true
+    default: '18'
+  node_path:
+    description: 'path of the application'
+    required: true
+  coverage:
+    description: 'percentage of test coverage required to pass'
+    required: true
+  ts_defs:
+    description: 'Install any npm @types required to run tests'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Checkout code
+    uses: actions/checkout@v3
+
+  - name: Use Node.js
+    uses: actions/setup-node@v2
+    with:
+      node-version: ${{ inputs.node_version }}
+
+  - id: test
+    shell: bash
+    working-directory: ${{  inputs.node_path  }}
+    run: |
+      sh ${{github.action_path}}/src/main.sh ${{  inputs.coverage  }} ${{  inputs.ts_defs  }}
+
+
+outputs:
+    test_coverage:
+      description: "percentage of test coverage"
+      value: ${{ steps.test.outputs.test_coverage }}
+    test_status:
+      description: "status of the test"
+      value: ${{ steps.test.outputs.test_status }}

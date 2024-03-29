@@ -1,0 +1,124 @@
+---
+name: Deploy Kustomize Manifest to EKS Cluster
+description: Deploy a Kustomize manifest to an EKS cluster
+inputs:
+  system:
+    description: "The name of the system to deploy."
+    required: true
+
+  subsystem:
+    description: "The name of the subsystem to deploy."
+    required: true
+
+  stack:
+    description: "The name of the stack to deploy."
+    required: true
+
+  application:
+    description: "The name of the application to deploy."
+    required: true
+  environment:
+    description: "The name of the environment to deploy."
+    required: true
+
+  namespace:
+    description: "The namespace to deploy."
+    required: true
+
+  eks_cluster:
+    description: "The name of the EKS cluster."
+    required: true
+  subapp:
+    description: "The name of the EKS subapp"
+    required: true
+
+  kustomize-path:
+    description: "The path to the Kustomize manifest."
+    required: true
+
+  aws_region:
+    description: "The AWS region of the EKS cluster."
+    required: true
+
+  aws_iam_role:
+    description: "The AWS IAM role to connect with AWS."
+    required: true
+
+  qdas_actions_token:
+    description: "Github token passed from the min workflow"
+    required: true
+
+  qdas_actions_user:
+    description: "Github user name passed from the min workflow"
+    required: true
+
+  rollout:
+    description: "Does the deploy do a rollout at the end?"
+    required: false
+    default: "true"
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Add /usr/local/bin to PATH
+      run: echo "/usr/local/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: ${{ inputs.aws_iam_role }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - name: Install ArgoCLI
+      shell: bash
+      run: |
+        sudo curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+        sudo rm argocd-linux-amd64
+
+    - name: Install Kubectl cli
+      shell: bash
+      run: |
+        sudo curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
+
+    - name: connect with EKS cluster
+      shell: bash
+      run: |
+        aws eks update-kubeconfig --name ${{ inputs.eks_cluster }} --region ${{ inputs.aws_region }}
+        aws sts get-caller-identity
+        aws eks get-token --region ${{ inputs.aws_region }} --cluster-name ${{ inputs.eks_cluster }}
+
+    - name: Setup Kubernetes port-forward daemon
+      uses: ccsq-qdas/shared-workflows/actions/k8s_port_forward@master
+      with:
+        workload: "svc/argocd-server"
+        mappings: "8080:443"
+        options: "--namespace=argocd"
+
+    - name: Port-forwarding setup & Argocd Login
+      shell: bash
+      run: |
+        export ARGO_PWD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d )
+        argocd login localhost:8080 --username admin --password $ARGO_PWD --insecure
+        echo "the login is successfull"
+        argocd repo add https://github.com/${{ github.repository }}.git --username ${{ inputs.QDAS_ACTIONS_USER }} --password ${{ inputs.QDAS_ACTIONS_TOKEN  }} --upsert
+        #argocd repo add https://github.com/${{ github.repository }}.git --username ${{ inputs.QDAS_ACTIONS_USER }} --password ${{ inputs.QDAS_ACTIONS_TOKEN }} --upsert
+        argocd proj create ${{ inputs.system }} --description "Project for all the portal system and subsystems"
+        echo " the repo added successful"
+        argocd app create ${{ inputs.application }} --repo https://github.com/${{ github.repository }}.git --path ${{ inputs.kustomize-path}} --dest-server https://kubernetes.default.svc --dest-namespace ${{ inputs.namespace }} --revision ${{ github.ref }} --directory-recurse=false --upsert --sync-policy none
+        argocd app sync ${{ inputs.application }} --prune
+
+    - name: Restart Deployment
+      shell: bash
+      if: inputs.rollout == 'true'
+      run: |
+        sleep 60
+        echo "Restarting Deployment"
+        kubectl rollout restart deployment ${{ inputs.application }}-${{ inputs.namespace }} -n ${{ inputs.namespace }}
+        echo "Waiting on deployment Restart"
+        kubectl -n ${{ inputs.namespace }} rollout status deployment/${{ inputs.application }}-${{ inputs.namespace }} --timeout=10m

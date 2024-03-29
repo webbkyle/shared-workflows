@@ -1,0 +1,29 @@
+name: 'Versioner'
+description: 'Takes in a string filter and outputs the latest version incrementing by type'
+inputs:
+  string_filter:
+    description: 'string filter that will be used'     
+    required: false 
+  type:
+    description: 'Takes inputs major,minor,build'
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - id: pull
+      shell: bash
+      run: | 
+        STRING_FILTER=${{  inputs.string_filter  }} \
+        [ -z STRING_FILTER ] \
+        && echo running without string filter \
+        && bash ${{github.action_path}}/src/main.sh -t ${{  inputs.type }} \
+        || bash ${{github.action_path}}/src/main.sh -t ${{  inputs.type }} -s ${{  inputs.string_filter  }}
+
+
+outputs:
+    version:
+      description: "new version"
+      value: ${{ steps.pull.outputs.version }}

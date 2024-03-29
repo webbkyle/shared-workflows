@@ -1,0 +1,19 @@
+name: text_append
+description: 'finds chars in a text file and appends chars right after it'
+inputs:
+  file_name:
+    description: 'name of the file to find'
+    required: true
+  search_chars:
+    description: 'charachters to search for'
+    required: true
+  append_chars:
+    description: 'charachters to append'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - id: find
+      shell: bash
+      run: |
+        sh ${{  github.action_path  }}/src/main.sh ${{  inputs.file_name  }} ${{  inputs.search_chars  }} ${{  inputs.append_chars }}

@@ -1,0 +1,62 @@
+name: 'Docker Build'
+description: 'Builds Docker Image'
+inputs:
+  environment:
+    description: 'Running Environment'     
+    required: true 
+  system:
+    description: 'System'     
+    required: true 
+  sub_system:
+    description: 'Sub_System'     
+    required: true 
+  stack:
+    description: 'Stack'     
+    required: true 
+  dockerfile_path:
+    description: 'Path of the Docker File'
+    required: true
+  docker_image_tag:
+    description: 'tag of the docker image'
+    required: true
+  docker_image_name:
+    description: 'name of the docker image'
+    required: true
+  docker_build_args:
+    description: 'extra arguments required by the docker build'
+    required: false
+    default: none
+    type: string
+  github_token:
+    description: 'github token'
+    required: false
+    type: string
+
+    
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+    - id: build
+      shell: bash
+      env:
+        DOCKERFILE_PATH: ${{  inputs.dockerfile_path  }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        sh ${{github.action_path}}/src/main.sh \
+          -t ${{  inputs.docker_image_tag  }} \
+          -n ${{  inputs.docker_image_name  }} \
+          -p ${{  inputs.dockerfile_path  }} \
+          -a "${{  inputs.docker_build_args  }}"
+
+outputs:
+    docker_image_name:
+      description: "Name of the docker image"
+      value: ${{ steps.build.outputs.docker_image_name }}
+    docker_image_tag:
+      description: "Name of the docker image"
+      value: ${{ steps.build.outputs.docker_image_tag }}
+    docker_image_details:
+      description: "Details of the docker image"
+      value: ${{ steps.build.outputs.docker_image_details }}

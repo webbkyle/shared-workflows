@@ -1,0 +1,16 @@
+apiVersion: v1
+entries:
+  - name: argo-cd
+    version: 1.0.0
+    created: 2023-06-29T00:00:00Z
+    digest: sha256:2028a073ae0d0ba0131f14011d95214fc50d9ec5afb4c529512b23b08f31a99a
+  - name: aws-load-balancer-controller
+    version: 1.2.0
+    created: 2023-06-29T00:00:00Z
+    digest: sha256:89e9a8d641f60adbb35928105e1fb402c5f092a5516c51faa952c04c4eff9790
+  - name: kubernetes-external-secrets
+    version: 2.1.3
+    created: 2023-06-29T00:00:00Z
+    digest: sha256:3635dca5250b9ba81a37c2c38c4f90550ecbd3580d34dcb3537322d3ec7341c5
+
+generated: "2023-06-29T11:43:30.081649904-04:00"

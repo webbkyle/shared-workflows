@@ -1,0 +1,54 @@
+name: 'Docker Push Actio'
+description: 'Docker Pushn Action'
+inputs:
+  environment:
+    description: 'Running Environment'     
+    required: true 
+  system:
+    description: 'System'     
+    required: true 
+  sub_system:
+    description: 'Sub_System'     
+    required: true 
+  stack:
+    description: 'Stack'     
+    required: true 
+  input_docker_image_name:
+    description: 'docker image name'
+    required: true
+  input_docker_image_tag:
+    description: 'docker image tag'
+    required: true
+  output_docker_image_name:
+    description: 'output docker image name'
+    required: true
+  output_docker_image_tag:
+    description: 'output docker image tag'
+    required: true
+  repo_url:
+    description: 'URL of docker repo'
+    required: true
+  repo_user_name:
+    description: 'repo username'
+    required: true
+  repo_password:
+    description: 'repo password'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - id: pull
+      shell: bash
+      run: |
+        sh ${{github.action_path}}/src/main.sh \
+          -o ${{  inputs.output_docker_image_tag  }}  -a ${{  inputs.output_docker_image_name  }} -t ${{  inputs.input_docker_image_tag  }} -n ${{  inputs.input_docker_image_name  }} -r ${{  inputs.repo_url  }} -u ${{  inputs.repo_user_name  }} -p ${{  inputs.repo_password  }}\
+          
+
+
+outputs:
+    docker_image_name:
+      description: "Name of the docker image"
+      value: ${{ steps.pull.outputs.docker_image_name }}
+    docker_image_details:
+      description: "Details of the docker image"
+      value: ${{ steps.pull.outputs.docker_image_details }}

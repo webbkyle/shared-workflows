@@ -1,0 +1,45 @@
+name: "Terragrunt Apply"
+description: Wrapper for running TG
+inputs:
+  terragrunt_path:
+    description: "Path to terragrunt file"
+    required: true
+  github_token:
+    description: "github actions org token"
+    required: true
+  tf_actions_version:
+    description: "Terraform Version"
+    required: true
+  tg_actions_version:
+    description: "Terragrunt Version"
+    required: true
+  tf_module_version:
+    description: "Module Release Tag"
+    required: true
+  tf_shared_module_repo:
+    description: "Repo for shared modules"
+    required: true
+  # github_user:
+  #   description: "github username"
+  #   required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Store inputs
+      shell: bash
+      id: inputs
+      run: |
+        ls -l
+        echo ::set-output name=terragrunt_path::$(echo ${{ inputs.terragrunt_path}})
+
+    - name: "Terragrunt Apply"
+      uses: ccsq-qdas/shared-workflows/actions/terragrunt-github-actions@master
+      with:
+        tf_actions_working_dir: ${{ steps.inputs.outputs.terragrunt_path }}
+        tf_actions_subcommand: "apply"
+        tf_actions_version: ${{ inputs.tf_actions_version}}
+        tg_actions_version: ${{ inputs.tg_actions_version}}
+        tf_actions_comment: true
+      env:
+        GH_TOKEN: ${{inputs.github_token}}

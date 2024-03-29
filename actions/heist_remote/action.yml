@@ -1,0 +1,90 @@
+name: heist_remote
+description: runs heist tests on jenkins
+inputs:
+  jenkins_user:
+    description: 'user for jenkins'
+    required: true
+  jenkins_token:
+    description: 'token for jenkins'
+    required: true
+  jenkins_url:
+    description: 'url of jenkins host'
+    required: true
+  jenkins_job:
+    required: true
+    description: 'string of type'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Tests on Jenkins
+      shell: bash
+      env: 
+        JENKINS_USER: ${{  inputs.jenkins_user  }}
+        JENKINS_URL: ${{  inputs.jenkins_url  }}
+        JENKINS_TOKEN: ${{  inputs.jenkins_token  }}
+        JENKINS_JOB: ${{  inputs.jenkins_job  }}
+      run: |
+        echo user: $JENKINS_USER
+        echo url:  $JENKINS_URL
+        echo token: $JENKINS_TOKEN
+        echo job: $JENKINS_JOB
+        TRIGGER_CODE=$(curl --head --write-out '%{http_code}' --silent --output /dev/null -X POST -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/buildWithParameters?$JENKINS_JOB=true")
+
+        if [ $TRIGGER_CODE != 201 ]; then
+          echo "There was an issue triggering tests, status code: $TRIGGER_CODE"
+          exit 1
+        fi
+        sleep 10
+        curl -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/lastBuild/api/json" > build_result.json
+        BUILD_ID=$(jq .number build_result.json)
+        BUILD_URL=$(jq .url build_result.json)
+        PREVIOUS_BUILD_ID=$(jq .previousBuild.number build_result.json)
+        echo "Last build id is: $BUILD_ID"
+        PARAM_NAME=$(jq -r '.actions[0].parameters[] | select(.value == true) | .name' build_result.json)
+        iteration=0
+        while [ $PARAM_NAME != $JENKINS_JOB ] && [ $iteration -lt 3 ]
+          do
+              echo "$BUILD_ID parameter is $PARAM_NAME, not $JENKINS_JOB"
+              curl -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/$PREVIOUS_BUILD_ID/api/json" > build_result.json
+              BUILD_ID=$(jq .number build_result.json)
+              BUILD_URL=$(jq .url build_result.json)
+              PREVIOUS_BUILD_ID=$(jq .previousBuild.number build_result.json)
+              echo "This build id is: $BUILD_ID"
+              PARAM_NAME=$(jq -r '.actions[0].parameters[] | select(.value == true) | .name' build_result.json)
+              echo "$BUILD_ID parameter name is $PARAM_NAME"
+              echo "Number of iterations: $iteration"
+              echo $((iteration++))
+          done
+
+        if [ $PARAM_NAME != $JENKINS_JOB ]; then
+          echo "Unable to locate the job triggered by parameter: $JENKINS_JOB. Exiting..."
+          exit 1
+        else
+          for i in {1..60}
+              do
+                  IN_PROGRESS=$(jq .inProgress build_result.json)
+                  RESULT=$(jq .result build_result.json)
+                  echo "Build is running: $IN_PROGRESS"
+                  if [ "$IN_PROGRESS" = "true" ]; then
+                  echo "Build hasn't completed yet, will call again in 1 minute..."
+                  sleep 60
+                  curl -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/$BUILD_ID/api/json" > build_result.json
+                  sleep 5
+                  else
+                  echo "Build completed and the result is $RESULT."
+                  case "$RESULT" in
+                      *"SUCCESS"*)
+                      echo "Moving to the next step to promote the code"
+                      exit 0 ;;
+                      *)
+                      echo "Tests didn't pass, build status is: $RESULT. For more info please visit: $BUILD_URL"
+                      exit 1 ;;
+                  esac
+                  fi
+              done
+              echo "Build did not finish after 30 minutes."
+              exit 1
+        fi
+          
+

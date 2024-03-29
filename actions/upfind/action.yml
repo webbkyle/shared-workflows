@@ -1,0 +1,26 @@
+name: Upfind
+description: 'finds files in parent folders'
+inputs:
+  file_name:
+    description: 'name of the file to find'
+    required: true
+  starting_directory:
+    description: 'path of starting directory'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - id: find
+      shell: bash
+      run: |
+        sh ${{  github.action_path  }}/src/main.sh -f ${{  inputs.file_name  }} -p ${{  inputs.starting_directory  }}
+          
+
+
+outputs:
+    file_path:
+      description: "path of the file"
+      value: ${{  steps.find.outputs.file_path }}
+    folder_path:
+      description: "path of the folder containing the file"
+      value: ${{  steps.find.outputs.folder_path }}

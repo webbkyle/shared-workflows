@@ -1,0 +1,70 @@
+name: update cname record
+description: update alb dns on route 53 cname record
+inputs:
+  system:
+    description: 'The name of the system to deploy.'
+    required: true
+  subsystem:
+    description: 'The name of the subsystem to deploy.'
+    required: true
+  stack:
+    description: 'The name of the stack to deploy.'
+    required: true
+  hosted_zone_id:
+    description: 'The hosted zone id for route 53.'
+    required: true
+  environment:
+    description: 'The name of the environment to deploy.'
+    required: true
+  endpoint:
+    description: 'The application endpoint to test.'
+    required: true
+  lbtype:
+    description: 'The type of the load balancer.'
+    required: true
+
+  cname:
+    description: 'The name of the route 53.'
+    required: true
+    
+  aws_region:
+    description: 'The AWS region of the EKS cluster.'
+    required: true
+  aws_iam_role:
+    description: 'The AWS IAM role to connect with AWS.'
+    required: true
+    
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: ${{ inputs.aws_iam_role }}
+        aws-region: ${{ inputs.aws_region }}
+    - name: Update Route 53 to ALB and health check
+      shell: bash
+      run: |
+        ALB_DNS=$(aws elbv2 describe-load-balancers --names ${{ inputs.system }}-${{ inputs.subsystem }}-${{ inputs.stack }}-${{ inputs.environment }}-${{ inputs.lbtype }} --query 'LoadBalancers[].DNSName' --output text)
+          
+        aws route53 change-resource-record-sets --hosted-zone-id ${{ inputs.hosted_zone_id }} --change-batch '{
+          "Changes": [
+            {
+              "Action": "UPSERT",
+              "ResourceRecordSet": {
+                "Name": "'${{ inputs.cname }}'",
+                "Type": "CNAME",
+                "TTL": 300,
+                "ResourceRecords": [
+                  {
+                    "Value": "'"$ALB_DNS"'"
+                  }
+                ]
+              }
+            }
+          ]
+        }'
+          
+

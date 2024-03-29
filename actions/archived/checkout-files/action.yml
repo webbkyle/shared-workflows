@@ -1,0 +1,22 @@
+name: 'checkout-files'
+description: 'Checkout only certain files'
+author: 'Bhacaz'
+
+branding:
+  icon: 'download'
+  color: 'blue'
+
+inputs:
+  files:
+    description: 'Files to checkout from the repo'
+    required: true
+  token:
+    description: 'A Github Private Access Token'
+    default: ${{ github.token }}
+  branch:
+    description: 'Branch to checkout files from'
+    required: false
+
+runs:
+  using: 'node16'
+  main: 'index.js'
