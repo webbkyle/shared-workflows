@@ -1,0 +1,8 @@
+.terraform
+.vscode
+*.tfstate
+*.tfstate.backup
+.terragrunt-cache
+.terraform.lock.hcl
+terragruntversion.yaml
+shared_modules

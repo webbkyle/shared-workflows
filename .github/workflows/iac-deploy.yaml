@@ -1,0 +1,129 @@
+name: REUSABLE-iac-DEPLOY
+on:
+  workflow_call:
+    inputs:
+      NAME:
+        description: "A random input name for the workflow"
+        type: string
+      SYSTEM:
+        description: "system"
+        required: true
+        type: string
+      SUB_SYSTEM:
+        description: "Sub_System"
+        required: true
+        type: string
+      STACK:
+        description: "Stack"
+        required: true
+        type: string
+      LAYER:
+        description: "Layer"
+        required: true
+        type: string
+      ENVIRONMENT:
+        description: "Environment"
+        required: true
+        type: string
+      AWS_ROLE_ARN:
+        description: "AWS Role to assume"
+        required: true
+        type: string
+      AWS_REGION:
+        description: "AWS Region"
+        required: true
+        type: string
+        default: "us-east-1"
+      TG_VERSION:
+        description: "Version of Terragrunt to use"
+        required: true
+        type: string
+      TG_PATH:
+        description: "Path to the Terragrunt HCL file"
+        required: true
+        type: string
+      MOCK_ENVIRONMENT:
+        description: "If this is set to true, the environment.yaml file will be overwritten with the inputs.ENVIRONMENT value"
+        required: false
+        default: false
+        type: boolean
+      TF_VERSION:
+        description: "Version of Terraform to use"
+        required: true
+        type: string
+      TF_SHARED_MODULE_REPO:
+        description: "Repo name for Terraform Shared Modules"
+        required: false
+        type: string
+      TF_MODULE_VERSION:
+        description: "Version of the Terraform Module"
+        required: false
+        type: string
+    secrets:
+      TF_SHARED_MODULE_REPO_GITHUB_TOKEN:
+        description: "Github token passed from the caller workflow"
+        required: true
+  permissions:
+    id-token: write
+    contents: read
+    packages: read
+
+jobs:
+  iac_deploy:
+    name: IAC Deploy
+    runs-on: ubuntu-latest
+    env:
+      # Software versions
+      TG_VERSION: ${{ inputs.TG_VERSION }}
+      TF_VERSION: ${{ inputs.TF_VERSION }}
+
+      # Shared Module library
+      TF_SHARED_MODULE_REPO_GITHUB_TOKEN: ${{ secrets.TF_SHARED_MODULE_REPO_GITHUB_TOKEN }}
+      TF_SHARED_MODULE_REPO: ${{ inputs.TF_SHARED_MODULE_REPO }}
+
+      # Terragrunt/Terraform Shared Modules
+      TG_PATH: ${{ inputs.TG_PATH }}
+      TF_MODULE_VERSION: ${{ inputs.TF_MODULE_VERSION }}
+
+    steps: 
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Get Version
+        shell: bash
+        id: vars
+        run: echo ::set-output name=tag::$(git rev-parse --short "GITHUB_SHA")
+
+      - name: Set Version
+        shell: bash
+        run: 'echo "version: ${{ steps.vars.outputs.tag }}" > version.yaml && cat version.yaml'
+      
+      - id: environment
+        uses: webbkyle/shared-workflows/actions/upfind@master
+        with: 
+          file_name: environment.yaml
+          starting_directory: ${{ inputs.TG_PATH }}
+
+      - name: Set Environment
+        shell: bash
+        run: |
+          [ ${{ inputs.MOCK_ENVIRONMENT }} = true ]\
+          && echo "environment: ${{ inputs.ENVIRONMENT }}" > ${{ steps.environment.outputs.file_path }}\
+          && echo "Overriding Environment ${{ inputs.ENVIRONMENT }} in ${{ steps.environment.outputs.file_path }}"
+          cat ${{ steps.environment.outputs.file_path }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Terragrunt Apply
+        uses: webbkyle/shared-workflows/actions/terragrunt_apply@master
+        with:
+          github_token: ${{ env.TF_SHARED_MODULE_REPO_GITHUB_TOKEN }}
+          tf_actions_version: ${{ env.TF_VERSION }}
+          tg_actions_version: ${{ env.TG_VERSION }}
+          terragrunt_path: ${{ env.TG_PATH }}
